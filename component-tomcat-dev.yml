@@ -2,21 +2,19 @@ application:
   configuration:
     input.quantity: "1"
     input.app-port: "8080" 
-    input.image: "us-east-1/ami-1ba18d72"
-    input.identity: "ec2-user"
     input.instance-size: "m1.small"
     input.java-opts: "-Duser.timezone=UTC"
     input.recipe-url: "https://s3.amazonaws.com/qubell-starter-kit-artifacts/qubell-bazaar/component-tomcat-dev-cookbooks-stable-d39f8c6.tar.gz"
+    input.operation_system: {image: "us-east-1/ami-1ba18d72", identity: ec2-user, log_paths: ["/var/log/tomcat6/catalina.out", "/var/log/messages"] }
 
   interfaces:
     input:
       quantity: "bind(workflow#input.quantity)"
       app-port: "bind(workflow#input.app-port)"
       java-opts: "bind(workflow#input.java-opts)"
-      image: "bind(workflow#input.image)"
-      identity: "bind(workflow#input.identity)"
-      instance-size: "bind(workflow#input.instance-size)"      
+      instance-size: "bind(workflow#input.instance-size)"
       recipe-url: "bind(workflow#input.recipe-url)"
+      operation_system: "bind(workflow#input.operation_system)"
     management:
       build-app: "bind(workflow#actions.build-app)"
       deploy-libs: "bind(workflow#actions.deploy-libs)"
@@ -26,17 +24,32 @@ application:
     output:
       app-hosts: "bind(workflow#result.app-hosts)"
       app-port: "bind(workflow#result.app-port)"
+      logging-dashboard: "bind(workflow#result.logging-dashboard)"
+
+  bindings:
+    - [workflow, logger]
 
   components:
+    logger:
+      type: reference.Service
+      interfaces:
+        logger:
+          logger-server: publish-signal(string)
     workflow:
       type: workflow.Instance
       interfaces:
         input:
+          operation_system:
+             type: configuration(map<string,object>)
+             suggestions:
+                 "amazon": {image: "us-east-1/ami-1ba18d72", identity: ec2-user, log_paths: ["/var/log/tomcat6/catalina.out", "/var/log/messages"]}
+                 "centos5": {image: "us-east-1/ami-beda31d7", identity: root, log_paths: ["/var/log/tomcat6/catalina.out", "/var/log/messages"]}
+                 "centos": {image: "us-east-1/ami-bf5021d6", identity: root, log_paths: ["/var/log/tomcat6/catalina.out", "/var/log/messages"]}
+                 "ubuntu1204": {image: "us-east-1/ami-967edcff", identity: ubuntu, log_paths: ["/var/log/tomcat6/catalina.out", "/var/log/syslog"]}
+                 "ubuntu1004": {image: "us-east-1/ami-9f3906f6", identity: ubuntu, log_paths: ["/var/log/tomcat6/catalina.out", "/var/log/syslog"]}
           app-port: configuration(string)
           quantity: configuration(string)
           java-opts: configuration(string)
-          image: configuration(string)
-          identity: configuration(string)
           instance-size: configuration(string)
           recipe-url: configuration(string)
         actions:
@@ -45,9 +58,14 @@ application:
           deploy-war: receive-command(string uri, string path, object context-attrs, object context-nodes)
           reconfigure: receive-command(string java-opts)
           manage-service: receive-command(string service-action)
+        logger:
+          logger-server: consume-signal(string)
         result:
           app-hosts: publish-signal(list<string>)
           app-port: publish-signal(string)
+          logging-dashboard: publish-signal(string)
+
+      required: [logger]
 
       configuration:
         configuration.triggers:
@@ -63,20 +81,30 @@ application:
                   default: "Tomcat's additional java options if needed"
             steps:
               - provision-vm:
-                  action: provisionAmazonVm
+                  action: provisionVmsWithLogging
+                  phase: provision
                   parameters:
                     roleName: default
                     hardwareId: "{$.instance-size}"
                     targetQuantity: "{$.quantity}"
                     jcloudsNodeNamePrefix: component
-                    vmIdentity: "{$.identity}"
-                    imageId: "{$.image}"
+                    vmIdentity: "{$.operation_system.identity}"
+                    imageId: "{$.operation_system.image}"
                   output:
                     app-hosts: ips
+                    logging-dashboard: logging-dashboard
+
+              - enable-logging:
+                  action: registerLogPath
+                  phase: post-provision
+                  precedingPhases: [provision]
+                  parameters:
+                    roles: [default]
+                    paths: "{$.operation_system.log_paths}"
 
               - tomcat-install:
                   action: "chefsolo"
-                  precedingPhases: [ provision-vm ]
+                  precedingPhases: [ provision, post-provision ]
                   phase: tomcat-install
                   parameters:
                     roles: [ default ]
@@ -91,6 +119,8 @@ application:
                 value: "{$.app-hosts}"
               app-port:
                 value: "{$.app-port}"
+              logging-dashboard:
+                value: "{$.logging-dashboard}"
           launch: *update
 
           build-app:
