@@ -154,7 +154,7 @@ application:
                       format: YAML
                       input:
                         array: "{$.signals.source.*.path}"
-                        string: "{$.singlesignals.compute.networks.public.ip}:{$.app-port}"
+                        string: "http://{$.singlesignals.compute.networks.public.ip}:{$.app-port}"
                   output:
                       sd: serialized
               - template:
