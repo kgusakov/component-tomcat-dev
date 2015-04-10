@@ -3,7 +3,7 @@ application:
   configuration:
     configuration.app-port: 8080
     configuration.java-opts: ""
-    configuration.recipe-url: "https://s3.amazonaws.com/qubell-starter-kit-artifacts/qubell-bazaar/component-tomcat-dev-cookbooks-stable-6ace29b.tar.gz"
+    configuration.recipe-url: "https://s3.amazonaws.com/qubell-starter-kit-artifacts/qubell-bazaar/component-tomcat-dev-cookbooks-stable-1576dee.tar.gz"
     compute-config.hardwareId: "c1.medium"
     compute-config.imageId:    "ami-246ed34c"
     compute-config.login:      "ec2-user"
